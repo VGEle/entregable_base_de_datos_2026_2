@@ -10,7 +10,8 @@
 -  Miguel Angel Marín Otalvaro --> miguel.marin3@udea.edu.co
 ## Docente: Angel Rey
 ## Universidad de Antioquia - Facultad de Integniería
-
+## Link repositorio dl proyecto completo: https://github.com/Code-Factory-Bookly/backendcf
+## Link proyecto Azure: https://dev.azure.com/CodeFactoryEAV10/CodeFactory%20EAV10/
 Este repositorio contiene exclusivamente el entregable de Bases de Datos del caso 14. El modelo se construyó a partir de las HU-01, HU-02, HU-03, HU-06, HU-20 y HU-22.
 
 ## Fundamentación del diseño
@@ -122,3 +123,23 @@ Estas preguntas pueden resolverse con las tablas y restricciones definidas en `s
 1. Crear o seleccionar una base de datos PostgreSQL vacía.
 2. Ejecutar el archivo `schema.sql`.
 3. Verificar que se creen las tablas `app_user`, `platform`, `servicios` y `profesionales` sin errores.
+
+## Evidencias de validación
+
+La ejecución se realizó en una base PostgreSQL de prueba. Las siguientes capturas muestran la creación del esquema, la existencia de las tablas y la ejecución correcta de las consultas de negocio:
+
+### Ejecución del esquema y tablas creadas
+
+![Ejecución de schema.sql](evidence/01-schema-ejecutado.png)
+
+![Tablas creadas](evidence/02-tablas-creadas.png)
+
+### Consultas de negocio
+
+![Consulta de filtro](evidence/03-consulta-filtro.png)
+
+![Consulta de agregación](evidence/04-consulta-agregacion.png)
+
+![Consulta con join](evidence/05-consulta-join.png)
+
+![Consulta de promedio por categoría](evidence/06-consulta-promedio.png)
