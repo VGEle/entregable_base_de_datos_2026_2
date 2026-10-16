@@ -167,6 +167,38 @@ erDiagram
 
 El modelo conserva la separación de responsabilidades del Sprint 1 y evita duplicar información de usuarios, profesionales, servicios y reservas. Las relaciones se implementan mediante claves foráneas y las reglas críticas se sostienen en PostgreSQL mediante restricciones, índices y triggers.
 
+## Normalización hasta tercera forma normal (3FN)
+
+El modelo se diseñó para reducir la repetición de datos y evitar anomalías de inserción, actualización y eliminación, siguiendo el criterio de normalización indicado en la guía académica.
+
+### Primera forma normal (1FN)
+
+- Cada atributo contiene un valor individual y no existen grupos repetitivos de columnas.
+- Las relaciones de muchos a muchos se separan en `profesional_servicio`.
+- Los horarios se almacenan como filas independientes en `horario_semanal`.
+- Los datos de una reserva, un servicio, un usuario y una notificación se almacenan en sus respectivas tablas.
+
+### Segunda forma normal (2FN)
+
+- Todas las tablas tienen una clave primaria definida.
+- Las tablas operativas utilizan identificadores `UUID` simples, por lo que sus atributos dependen de la totalidad de la clave.
+- En `profesional_servicio`, la combinación `profesional_id, servicio_id` es única y `created_at` describe la asociación completa, no solo una de sus partes.
+
+### Tercera forma normal (3FN)
+
+- Los datos comunes de una cuenta se mantienen únicamente en `app_user`; la información específica del profesional se mantiene en `profesionales`.
+- Los datos descriptivos de los servicios se mantienen en `servicios` y no se repiten dentro de `bookings`.
+- Los horarios, auditoría, MFA y notificaciones tienen responsabilidades independientes y se relacionan mediante claves foráneas.
+- No se almacenan atributos que dependan de otro atributo no clave dentro de la misma entidad; las relaciones se reconstruyen mediante `JOIN`.
+
+Existen algunas decisiones intencionales que pueden parecer redundantes, pero no rompen la integridad del modelo:
+
+- `profesionales.rol` se mantiene junto con `id` para implementar la FK compuesta hacia `app_user(id, role)` y garantizar que el perfil corresponda a una cuenta con rol `PROFESSIONAL`.
+- `notification_delivery.recipient_email` conserva el destinatario utilizado en el momento del envío. Funciona como una fotografía histórica de la notificación y no como una segunda fuente para los datos de la cuenta.
+- `audit_log.metadata` utiliza `JSONB` porque una bitácora puede registrar información variable según el tipo de evento. No contiene atributos operativos principales del sistema.
+
+Por estas razones, el modelo se considera normalizado hasta 3FN para el alcance del Sprint 2, manteniendo separadas las entidades y evitando duplicaciones que produzcan inconsistencias.
+
 ## Modelo físico detallado
 
 La siguiente especificación complementa el diagrama lógico y permite verificar directamente el DDL de [`schema.sql`](schema.sql). `NOT NULL` identifica atributos obligatorios; cuando no se indica un valor por defecto, la aplicación debe proporcionarlo.
