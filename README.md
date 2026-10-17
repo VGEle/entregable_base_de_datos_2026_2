@@ -15,7 +15,7 @@ Este repositorio contiene exclusivamente el entregable de Base de Datos del caso
 
 El Sprint 1 cubrió las cuentas, la plataforma, el catálogo de servicios y los perfiles profesionales. El Sprint 2 amplía el modelo con horarios, relación entre profesionales y servicios, reservas, auditoría, MFA y registro técnico de notificaciones.
 
-La fuente técnica de referencia es el código SQL de Flyway ubicado en `src/main/resources/db/migration` del repositorio principal. En este repositorio se presenta una versión académica autocontenida del modelo, separada del código Java de la aplicación.
+La fuente técnica de referencia es el código SQL de Flyway ubicado en `src/main/resources/db/migration` del repositorio principal. Este repositorio conserva esas migraciones en `migrations/` y presenta además una versión académica autocontenida del modelo, separada del código Java de la aplicación.
 
 ## Cambios frente al Sprint 1
 
@@ -291,7 +291,7 @@ La combinación `profesional_id, servicio_id` es única.
 | `cancelled_at` | `TIMESTAMP` | Sí | Fecha opcional de cancelación |
 | `cancellation_reason` | `TEXT` | Sí | Motivo opcional |
 
-El índice único parcial `unique_booking_per_professional_time` impide duplicar una franja únicamente cuando el estado es `CONFIRMADA`.
+El índice único parcial `unique_booking_per_professional_time` impide duplicar una franja confirmada exactamente igual y la restricción `booking_no_overlapping_confirmed` impide que dos reservas confirmadas del mismo profesional se solapen.
 
 ### `audit_log`
 
@@ -554,6 +554,7 @@ El script ejecutable de creación de roles y privilegios está en [`docs/roles-s
 ## Archivos del entregable
 
 - `schema.sql`: script DDL autocontenido y ejecutable sobre PostgreSQL vacío, con las tablas y restricciones del Sprint 2.
+- `migrations/`: migraciones Flyway locales, desde `V1` hasta `V46`, que representan la evolución incremental del esquema.
 - `docs/roles-seguridad.sql`: roles PostgreSQL, permisos y revocaciones según mínimo privilegio.
 - [`docs/analisis-almacenamiento.md`](docs/analisis-almacenamiento.md): documento completo con el análisis de almacenamiento, índices, costo de una consulta y optimización algebraica exigido en los criterios 7, 8 y 9.
 - `evidence/`: evidencias de ejecución del esquema y de las restricciones principales.
@@ -576,19 +577,29 @@ El script ejecutable de creación de roles y privilegios está en [`docs/roles-s
 - [Consultas de auditoría, servicios y horarios](evidence/06b-consultas-auditoria-servicio-horario.png)
 - [Plan de ejecución de consulta con `JOIN`](evidence/07-explain-consulta.png)
 
+### Validación final en Supabase
+
+- [Tablas creadas por el `schema.sql` final](evidence/08-supabase-tablas.png)
+- [Restricción contra solapamiento de reservas confirmadas](evidence/09-supabase-restriccion-bookings.png)
+- [Índices de `bookings`](evidence/10-supabase-indices-bookings.png)
+
 ### Documento de análisis
 
 En este documento [`docs/analisis-almacenamiento.md`](docs/analisis-almacenamiento.md) se contienen los supuestos, fórmulas, cálculos paso a paso, comparación de costos y transformaciones algebraicas.
 
 ## Ejecución y validación
 
-1. Crear una base PostgreSQL vacía.
-2. Ejecutar `schema.sql`.
-3. Verificar las tablas, restricciones, índices y triggers con `\\dt`, `\\d nombre_tabla` y consultas a `pg_indexes`.
-4. Ejecutar las consultas de negocio documentadas.
-5. Validar que `audit_log` rechace `UPDATE`, `DELETE` y `TRUNCATE`.
-6. Validar que dos reservas confirmadas no puedan ocupar la misma franja.
-7. Registrar en `evidence/` capturas o salidas de las validaciones.
+Para revisar el estado consolidado, crear una base PostgreSQL vacía y ejecutar `schema.sql`. Este script ya incluye las extensiones, tablas, restricciones, índices y triggers del Sprint 2.
+
+Para reproducir la evolución mediante Flyway, ejecutar en orden los archivos de `migrations/` (`V1` a `V46`) sobre una base compatible con la configuración de Flyway del proyecto principal. No se deben ejecutar `schema.sql` y las migraciones Flyway sobre la misma base, porque representan dos formas alternativas de construir el esquema.
+
+Después de cualquiera de las dos opciones:
+
+1. Verificar las tablas, restricciones, índices y triggers con `\\dt`, `\\d nombre_tabla` y consultas a `pg_indexes`.
+2. Ejecutar las consultas de negocio documentadas.
+3. Validar que `audit_log` rechace `UPDATE`, `DELETE` y `TRUNCATE`.
+4. Validar que dos reservas confirmadas solapadas no sean aceptadas para el mismo profesional.
+5. Registrar en `evidence/` capturas o salidas de las validaciones.
 
 ## Fuente de trazabilidad
 
@@ -603,5 +614,6 @@ Las decisiones del modelo se contrastaron con la rama `main` del repositorio pri
 - `src/main/resources/db/migration/V43__create_notification_delivery.sql`
 - `src/main/resources/db/migration/V44__cascade_notification_delivery_booking.sql`
 - `src/main/resources/db/migration/V45__create_professional_service.sql`
+- `src/main/resources/db/migration/V46__prevent_overlapping_confirmed_bookings.sql`
 
 La matriz de roles PostgreSQL, la estimación de volumen y el análisis de costos quedan documentados en este README y en [`docs/analisis-almacenamiento.md`](docs/analisis-almacenamiento.md), conforme a los requerimientos de entrega del Sprint 2.

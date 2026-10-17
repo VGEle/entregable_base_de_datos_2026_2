@@ -2,6 +2,7 @@
 -- PostgreSQL / Supabase. Ejecutar sobre una base de datos vacía.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 -- HU-01 y HU-03: cuentas, roles, bloqueo de acceso y MFA.
 CREATE TABLE app_user (
@@ -143,6 +144,15 @@ CREATE INDEX idx_bookings_start_time ON bookings (start_time);
 CREATE UNIQUE INDEX unique_booking_per_professional_time
     ON bookings (professional_id, start_time, end_time)
     WHERE status = 'CONFIRMADA';
+
+-- Ninguna reserva confirmada puede solaparse con otra del mismo profesional.
+ALTER TABLE bookings
+    ADD CONSTRAINT booking_no_overlapping_confirmed
+    EXCLUDE USING gist (
+        professional_id WITH =,
+        tsrange(start_time, end_time, '[)') WITH &&
+    )
+    WHERE (status = 'CONFIRMADA');
 
 -- HU-19: bitácora inmutable de acciones críticas.
 CREATE TABLE audit_log (
