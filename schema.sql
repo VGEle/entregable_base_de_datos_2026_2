@@ -268,3 +268,98 @@ CREATE INDEX ix_notification_delivery_booking_created
     ON notification_delivery (booking_id, created_at DESC);
 CREATE INDEX ix_notification_delivery_type_created
     ON notification_delivery (event_type, created_at DESC);
+
+-- HU-08 y #220: las reservas reprogramadas y completadas también ocupan la franja.
+ALTER TABLE bookings
+    DROP CONSTRAINT booking_no_overlapping_confirmed;
+
+ALTER TABLE bookings
+    ADD CONSTRAINT booking_no_overlapping_confirmed
+    EXCLUDE USING gist (
+        professional_id WITH =,
+        tsrange(start_time, end_time, '[)') WITH &&
+    )
+    WHERE (status IN ('CONFIRMADA', 'RESCHEDULED', 'COMPLETED'));
+
+-- HU-05: bloqueos temporales de agenda.
+CREATE TABLE bloqueo_agenda (
+    id UUID NOT NULL,
+    profesional_id UUID NOT NULL,
+    inicio TIMESTAMP NOT NULL,
+    fin TIMESTAMP NOT NULL,
+    motivo VARCHAR(200),
+    created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT pk_bloqueo_agenda PRIMARY KEY (id),
+    CONSTRAINT fk_bloqueo_agenda_profesional
+        FOREIGN KEY (profesional_id) REFERENCES profesionales (id),
+    CONSTRAINT ck_bloqueo_agenda_rango CHECK (fin > inicio),
+    CONSTRAINT bloqueo_agenda_sin_solapamiento EXCLUDE USING gist (
+        profesional_id WITH =,
+        tsrange(inicio, fin, '[)') WITH &&
+    )
+);
+
+CREATE INDEX ix_bloqueo_agenda_profesional_inicio
+    ON bloqueo_agenda (profesional_id, inicio);
+
+-- HU-11/HU-12: recursos físicos y asignación a servicios.
+CREATE TABLE recursos_fisicos (
+    id UUID NOT NULL,
+    nombre VARCHAR(150) NOT NULL,
+    cantidad_total INTEGER NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT pk_recursos_fisicos PRIMARY KEY (id),
+    CONSTRAINT ck_recursos_fisicos_cantidad CHECK (cantidad_total > 0)
+);
+
+CREATE UNIQUE INDEX uk_recursos_fisicos_nombre
+    ON recursos_fisicos (lower(nombre));
+
+CREATE TABLE servicio_recurso (
+    servicio_id UUID NOT NULL,
+    recurso_id UUID NOT NULL,
+    CONSTRAINT pk_servicio_recurso PRIMARY KEY (servicio_id, recurso_id),
+    CONSTRAINT fk_servicio_recurso_servicio
+        FOREIGN KEY (servicio_id) REFERENCES servicios (id) ON DELETE CASCADE,
+    CONSTRAINT fk_servicio_recurso_recurso
+        FOREIGN KEY (recurso_id) REFERENCES recursos_fisicos (id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_servicio_recurso_recurso
+    ON servicio_recurso (recurso_id);
+
+-- HU-16: conserva el precio vigente al momento de crear la reserva.
+ALTER TABLE bookings
+    ADD COLUMN price_at_booking NUMERIC(12, 2);
+
+ALTER TABLE bookings
+    ADD CONSTRAINT ck_bookings_price_at_booking
+    CHECK (price_at_booking IS NULL OR price_at_booking > 0);
+
+-- HU-16: índices de filtros y relaciones para reportes.
+CREATE INDEX idx_bookings_report_period_status
+    ON bookings (start_time, status);
+
+CREATE INDEX idx_bookings_service_period_status
+    ON bookings (service_id, start_time, status);
+
+CREATE INDEX idx_servicio_recurso_servicio
+    ON servicio_recurso (servicio_id);
+
+-- HU-16 y HU-13: ampliar los dominios de auditoría.
+ALTER TABLE audit_log DROP CONSTRAINT ck_audit_log_action_type;
+ALTER TABLE audit_log ADD CONSTRAINT ck_audit_log_action_type CHECK (
+    action_type IN (
+        'BOOKING_CREATED',
+        'BOOKING_CANCELLED',
+        'ROLE_CHANGED',
+        'REPORT_VIEWED',
+        'CUSTOMER_HISTORY_VIEWED'
+    )
+);
+
+ALTER TABLE audit_log DROP CONSTRAINT ck_audit_log_resource_type;
+ALTER TABLE audit_log ADD CONSTRAINT ck_audit_log_resource_type CHECK (
+    resource_type IN ('BOOKING', 'USER', 'REPORT')
+);
