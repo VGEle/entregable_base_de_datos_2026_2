@@ -16,6 +16,9 @@ TO bookly_admin, bookly_app, bookly_readonly;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO bookly_admin;
 GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO bookly_admin;
 
+GRANT EXECUTE ON FUNCTION get_customer_booking_history(UUID, TIMESTAMP, TIMESTAMP)
+TO bookly_app, bookly_readonly;
+
 GRANT SELECT, INSERT, UPDATE ON
     app_user,
     platform,
@@ -26,6 +29,9 @@ GRANT SELECT, INSERT, UPDATE ON
     mfa_recovery_code,
     mfa_trusted_device,
     notification_delivery
+TO bookly_app;
+
+GRANT SELECT ON bloqueo_agenda, recursos_fisicos, servicio_recurso
 TO bookly_app;
 
 GRANT SELECT ON servicios TO bookly_app;

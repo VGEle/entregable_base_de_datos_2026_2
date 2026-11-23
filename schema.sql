@@ -347,6 +347,39 @@ CREATE INDEX idx_bookings_service_period_status
 CREATE INDEX idx_servicio_recurso_servicio
     ON servicio_recurso (servicio_id);
 
+-- HU-13: historial de reservas de un cliente.
+-- La función centraliza el filtro por cliente y permite acotar el historial por fechas.
+CREATE OR REPLACE FUNCTION get_customer_booking_history(
+    p_customer_id UUID,
+    p_from TIMESTAMP DEFAULT NULL,
+    p_to TIMESTAMP DEFAULT NULL
+)
+RETURNS TABLE (
+    booking_id UUID,
+    professional_id UUID,
+    service_id UUID,
+    start_time TIMESTAMP,
+    end_time TIMESTAMP,
+    status VARCHAR,
+    price_at_booking NUMERIC
+)
+LANGUAGE SQL
+STABLE
+AS $$
+    SELECT b.id,
+           b.professional_id,
+           b.service_id,
+           b.start_time,
+           b.end_time,
+           b.status,
+           b.price_at_booking
+    FROM bookings b
+    WHERE b.customer_id = p_customer_id
+      AND (p_from IS NULL OR b.start_time >= p_from)
+      AND (p_to IS NULL OR b.start_time < p_to)
+    ORDER BY b.start_time DESC, b.id DESC;
+$$;
+
 -- HU-16 y HU-13: ampliar los dominios de auditoría.
 ALTER TABLE audit_log DROP CONSTRAINT ck_audit_log_action_type;
 ALTER TABLE audit_log ADD CONSTRAINT ck_audit_log_action_type CHECK (

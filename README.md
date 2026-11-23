@@ -1,4 +1,4 @@
-# Entregable de Bases de Datos - Sprint 2
+# Entregable de Bases de Datos - Sprint 3
 
 ## Caso 14: Plataforma de Reservas de Servicios
 
@@ -7,13 +7,13 @@
 **Repositorio principal:** [Code-Factory-Bookly/backendcf](https://github.com/Code-Factory-Bookly/backendcf)
 **Proyecto Azure DevOps:** [CodeFactory EAV10](https://dev.azure.com/CodeFactoryEAV10/CodeFactory%20EAV10/)
 
-**Integrantes:** Sofía Espinal Vasquez, Elena Vargas Grisales, Miguel Angel Marín Otalvaro.
+**Integrantes:** Sofía Espinal Vasquez, Elena Vargas Grisales, Miguel Angel Marín Otalvaro, Ana María Garzón Giraldo.
 
 ## Propósito y alcance
 
 Este repositorio contiene exclusivamente el entregable de Base de Datos del caso 14 Plataforma de Reservas de Servicios. El diseño se construyó a partir de las historias de usuario implementadas en los Sprints 1 y 2.
 
-El Sprint 1 cubrió las cuentas, la plataforma, el catálogo de servicios y los perfiles profesionales. El Sprint 2 amplía el modelo con horarios, relación entre profesionales y servicios, reservas, auditoría, MFA y registro técnico de notificaciones.
+El Sprint 1 cubrió las cuentas, la plataforma, el catálogo de servicios y los perfiles profesionales. El Sprint 2 amplió el modelo con horarios, relación entre profesionales y servicios, reservas, auditoría, MFA y registro técnico de notificaciones. El Sprint 3 incorpora bloqueos, recursos físicos, precio histórico, consultas de reportes y auditoría adicional.
 
 La fuente técnica de referencia es el código SQL de Flyway ubicado en `src/main/resources/db/migration` del repositorio principal. Este repositorio conserva esas migraciones en `migrations/` y presenta además una versión académica autocontenida del modelo, separada del código Java de la aplicación.
 
@@ -27,6 +27,16 @@ La fuente técnica de referencia es el código SQL de Flyway ubicado en `src/mai
 - Se agregó `notification_delivery` para controlar la entrega idempotente de correos de reservas (HU-10).
 - Se ampliaron las consultas de negocio para incluir reservas, notificaciones y auditoría.
 
+## Cambios respecto al Sprint 2
+
+- Se modificó la regla de solapamiento para que las reservas `CONFIRMADA`, `RESCHEDULED` y `COMPLETED` ocupen agenda.
+- Se agregó `bloqueo_agenda` para registrar bloqueos temporales sin rangos invertidos ni solapamientos del mismo profesional (HU-05).
+- Se agregaron `recursos_fisicos` y `servicio_recurso` para controlar recursos y su relación con los servicios (HU-11 y HU-12).
+- Se agregó `bookings.price_at_booking` para conservar el precio histórico usado en cada reserva (HU-16).
+- Se agregaron índices para consultas de reportes y se ampliaron los dominios de auditoría con `REPORT_VIEWED` y `CUSTOMER_HISTORY_VIEWED` (HU-13 y HU-16).
+- Se agregó la función `get_customer_booking_history` para consultar el historial de un cliente con filtros opcionales de fecha (HU-13).
+- Se actualizaron los roles técnicos para cubrir las tablas nuevas y el permiso `EXECUTE` de la función.
+
 ## Diagrama ER refinado
 
 ```mermaid
@@ -39,6 +49,9 @@ erDiagram
     PROFESIONALES ||--o{ BOOKINGS : "atiende"
     SERVICIOS ||--o{ BOOKINGS : "corresponde a"
     BOOKINGS ||--o{ NOTIFICATION_DELIVERY : "genera"
+    PROFESIONALES ||--o{ BLOQUEO_AGENDA : "bloquea"
+    SERVICIOS ||--o{ SERVICIO_RECURSO : "requiere"
+    RECURSOS_FISICOS ||--o{ SERVICIO_RECURSO : "se asigna"
     APP_USER ||--o{ AUDIT_LOG : "ejecuta"
     APP_USER ||--o{ MFA_RECOVERY_CODE : "posee"
     APP_USER ||--o{ MFA_TRUSTED_DEVICE : "autoriza"
@@ -104,6 +117,7 @@ erDiagram
         timestamp start_time
         timestamp end_time
         varchar status
+        numeric price_at_booking
         timestamp cancelled_at
         text cancellation_reason
     }
@@ -145,9 +159,28 @@ erDiagram
         timestamptz last_attempt_at
         text error_message
     }
+    BLOQUEO_AGENDA {
+        uuid id PK
+        uuid profesional_id FK
+        timestamp inicio
+        timestamp fin
+        varchar motivo
+        timestamptz created_at
+    }
+    RECURSOS_FISICOS {
+        uuid id PK
+        varchar nombre UK
+        integer cantidad_total
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    SERVICIO_RECURSO {
+        uuid servicio_id PK, FK
+        uuid recurso_id PK, FK
+    }
 ```
 
-`platform` mantiene una sola fila mediante un índice único sobre una expresión constante. `profesionales` comparte su identificador con `app_user` y utiliza una FK compuesta para aceptar únicamente cuentas con rol `PROFESSIONAL`. La unicidad parcial de `bookings` solo aplica a reservas `CONFIRMADA`, de modo que una franja cancelada pueda reutilizarse.
+`platform` mantiene una sola fila mediante un índice único sobre una expresión constante. `profesionales` comparte su identificador con `app_user` y utiliza una FK compuesta para aceptar únicamente cuentas con rol `PROFESSIONAL`. La unicidad parcial de `bookings` y la exclusión por rango aplican a los estados que ocupan agenda (`CONFIRMADA`, `RESCHEDULED` y `COMPLETED`), de modo que una franja cancelada pueda reutilizarse.
 
 ## Modelo lógico y restricciones principales
 
@@ -164,6 +197,10 @@ erDiagram
 | `mfa_recovery_code` | `id` | FK a `app_user`; almacena hashes de códigos de recuperación. |
 | `mfa_trusted_device` | `id` | FK a `app_user`; token almacenado como hash y fecha de expiración. |
 | `notification_delivery` | `id` | Evento único; FK a reserva; estados `PENDING`, `SENT` y `FAILED`; consistencia entre estado, fecha y error. |
+| `bloqueo_agenda` | `id` | FK a profesional; rango válido y sin solapamientos por profesional. |
+| `recursos_fisicos` | `id` | Nombre único; cantidad total positiva. |
+| `servicio_recurso` | `(servicio_id, recurso_id)` | Relación N:M entre servicios y recursos; FKs con reglas de borrado explícitas. |
+| `bookings.price_at_booking` | — | Snapshot positivo o nulo del precio histórico de la reserva. |
 
 El modelo conserva la separación de responsabilidades del Sprint 1 y evita duplicar información de usuarios, profesionales, servicios y reservas. Las relaciones se implementan mediante claves foráneas y las reglas críticas se sostienen en PostgreSQL mediante restricciones, índices y triggers.
 
@@ -348,7 +385,7 @@ Además, si el estado es `SENT`, `sent_at` debe existir; para otros estados debe
 
 ## Preguntas de negocio
 
-Las cinco preguntas del Sprint 1 se mantienen y se amplían con preguntas del Sprint 2:
+Las preguntas de los sprints anteriores se mantienen y se amplían con las nuevas reglas y entidades del Sprint 3:
 
 1. ¿Cuáles son los servicios activos con duración superior a 60 minutos?
 2. ¿Qué profesionales tienen una especialidad determinada?
@@ -360,6 +397,11 @@ Las cinco preguntas del Sprint 1 se mantienen y se amplían con preguntas del Sp
 8. ¿Qué notificaciones están pendientes o fallaron y deben reintentarse?
 9. ¿Qué acciones críticas realizó un usuario en un período determinado?
 10. ¿Qué profesionales ofrecen un servicio específico?
+11. ¿Qué bloqueos de agenda tiene un profesional en un rango de fechas?
+12. ¿Qué recursos físicos requiere cada servicio y cuál es su cantidad disponible?
+13. ¿Cuál es el historial de reservas de un cliente en un período determinado?
+14. ¿Qué porcentaje de ocupación tiene cada profesional en un período?
+15. ¿Cuál fue el ingreso agrupado por servicio usando el precio histórico de cada reserva?
 
 ### Consultas del Sprint 1
 
@@ -500,6 +542,62 @@ WHERE lower(s.nombre) = lower('Consulta general')
 ORDER BY u.full_name;
 ```
 
+### Consultas del Sprint 3
+
+#### 11. Bloqueos de agenda de un profesional
+
+```sql
+SELECT id, profesional_id, inicio, fin, motivo
+FROM bloqueo_agenda
+WHERE profesional_id = :profesional_id
+  AND inicio < :hasta
+  AND fin > :desde
+ORDER BY inicio;
+```
+
+#### 12. Recursos requeridos por un servicio
+
+```sql
+SELECT s.nombre AS servicio, r.nombre AS recurso, r.cantidad_total
+FROM servicio_recurso sr
+JOIN servicios s ON s.id = sr.servicio_id
+JOIN recursos_fisicos r ON r.id = sr.recurso_id
+WHERE s.id = :servicio_id
+ORDER BY r.nombre;
+```
+
+#### 13. Historial de reservas mediante función almacenada
+
+```sql
+SELECT *
+FROM get_customer_booking_history(:customer_id, :desde, :hasta);
+```
+
+La función filtra por cliente y aplica, cuando se proporcionan, los límites de fecha.
+
+#### 14. Reservas que ocupan agenda por profesional
+
+```sql
+SELECT professional_id, COUNT(*) AS reservas_que_ocupan
+FROM bookings
+WHERE status IN ('CONFIRMADA', 'RESCHEDULED', 'COMPLETED')
+  AND start_time >= :desde
+  AND start_time < :hasta
+GROUP BY professional_id;
+```
+
+#### 15. Ingresos por servicio usando el precio histórico
+
+```sql
+SELECT service_id,
+       SUM(price_at_booking) AS ingresos
+FROM bookings
+WHERE status IN ('CONFIRMADA', 'COMPLETED')
+  AND price_at_booking IS NOT NULL
+GROUP BY service_id
+ORDER BY ingresos DESC;
+```
+
 Las consultas 2, 4, 6, 7, 9 y 10 incluyen reuniones (`JOIN` o `LEFT JOIN`); las consultas 3 y 5 incluyen agregaciones. Los valores UUID y nombres utilizados como ejemplo pueden reemplazarse por datos existentes sin cambiar la estructura de las consultas.
 
 ## Estimación de volumen y crecimiento
@@ -529,6 +627,24 @@ Las siguientes cifras son supuestos académicos para dimensionar el sistema; no 
 - Los códigos de recuperación y dispositivos confiables pueden crecer por regeneraciones y nuevos dispositivos; una política de limpieza puede reducir el volumen real.
 - No se considera particionamiento en esta etapa porque los volúmenes iniciales son pequeños; se reevaluará cuando `bookings` o `audit_log` superen varios millones de filas.
 
+## Función almacenada de HU-13
+
+`get_customer_booking_history(p_customer_id, p_from, p_to)` es una función SQL estable que recibe el
+identificador del cliente y dos límites de fecha opcionales. Retorna el identificador de la reserva,
+profesional, servicio, horario, estado y precio histórico, ordenados del más reciente al más antiguo.
+
+Su propósito es centralizar en PostgreSQL la consulta del historial del cliente y evitar que cada consumidor
+repita la misma lógica de filtrado. Ejemplo:
+
+```sql
+SELECT *
+FROM get_customer_booking_history(
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    CURRENT_TIMESTAMP::timestamp - INTERVAL '30 days',
+    CURRENT_TIMESTAMP::timestamp
+);
+```
+
 ## Roles y esquema de seguridad
 
 Los roles funcionales de la aplicación (`CUSTOMER`, `PROFESSIONAL` y `ADMIN`) representan permisos de negocio almacenados en `app_user.role`. Son diferentes de los roles técnicos de PostgreSQL, que controlan el acceso directo al esquema.
@@ -545,6 +661,7 @@ Reglas de seguridad documentadas:
 
 - Se revoca `CREATE` sobre el esquema `public` para `PUBLIC`.
 - `bookly_app` no puede crear tablas ni modificar la bitácora `audit_log`.
+- `bookly_app` recibe `SELECT` sobre las tablas nuevas y `EXECUTE` únicamente sobre la función de historial.
 - `bookly_readonly` no puede insertar, actualizar, eliminar ni truncar datos.
 - La auditoría se conserva mediante el trigger de inmutabilidad definido en `schema.sql`.
 - Las credenciales reales no se almacenan en este repositorio; los roles se crean sin login y se asignan a usuarios de conexión según el entorno.
@@ -553,13 +670,13 @@ El script ejecutable de creación de roles y privilegios está en [`docs/roles-s
 
 ## Archivos del entregable
 
-- `schema.sql`: script DDL autocontenido y ejecutable sobre PostgreSQL vacío, con las tablas y restricciones del Sprint 2.
-- `migrations/`: migraciones Flyway locales, desde `V1` hasta `V46`, que representan la evolución incremental del esquema.
+- `schema.sql`: script DDL autocontenido y ejecutable sobre PostgreSQL vacío, con las tablas, restricciones, triggers, índices y función de la entrega final.
+- `migrations/`: migraciones Flyway locales, desde `V1` hasta `V70`, que representan la evolución incremental del esquema.
 - `docs/roles-seguridad.sql`: roles PostgreSQL, permisos y revocaciones según mínimo privilegio.
 - [`docs/analisis-almacenamiento.md`](docs/analisis-almacenamiento.md): documento completo con el análisis de almacenamiento, índices, costo de una consulta y optimización algebraica exigido en los criterios 7, 8 y 9.
 - `evidence/`: evidencias de ejecución del esquema y de las restricciones principales.
 
-## Evidencias del Sprint 2
+## Evidencias del Sprint 3
 
 ### Esquema y estructura
 
@@ -582,6 +699,8 @@ El script ejecutable de creación de roles y privilegios está en [`docs/roles-s
 - [Tablas creadas por el `schema.sql` final](evidence/08-supabase-tablas.png)
 - [Restricción contra solapamiento de reservas confirmadas](evidence/09-supabase-restriccion-bookings.png)
 - [Índices de `bookings`](evidence/10-supabase-indices-bookings.png)
+- Las nuevas validaciones deben documentar los bloqueos de agenda, recursos físicos, precio histórico,
+  auditoría ampliada, función de historial y permisos `EXECUTE`.
 
 ### Documento de análisis
 
@@ -589,16 +708,16 @@ En este documento [`docs/analisis-almacenamiento.md`](docs/analisis-almacenamien
 
 ## Ejecución y validación
 
-Para revisar el estado consolidado, crear una base PostgreSQL vacía y ejecutar `schema.sql`. Este script ya incluye las extensiones, tablas, restricciones, índices y triggers del Sprint 2.
+Para revisar el estado consolidado, crear una base PostgreSQL vacía y ejecutar `schema.sql`. Este script incluye las extensiones, tablas, restricciones, índices, triggers y función almacenada de la Entrega 3.
 
-Para reproducir la evolución mediante Flyway, ejecutar en orden los archivos de `migrations/` (`V1` a `V46`) sobre una base compatible con la configuración de Flyway del proyecto principal. No se deben ejecutar `schema.sql` y las migraciones Flyway sobre la misma base, porque representan dos formas alternativas de construir el esquema.
+Para reproducir la evolución mediante Flyway, ejecutar en orden los archivos de `migrations/` (`V1` a `V70`) sobre una base compatible con la configuración de Flyway del proyecto principal. No se deben ejecutar `schema.sql` y las migraciones Flyway sobre la misma base, porque representan dos formas alternativas de construir el esquema.
 
 Después de cualquiera de las dos opciones:
 
 1. Verificar las tablas, restricciones, índices y triggers con `\\dt`, `\\d nombre_tabla` y consultas a `pg_indexes`.
 2. Ejecutar las consultas de negocio documentadas.
 3. Validar que `audit_log` rechace `UPDATE`, `DELETE` y `TRUNCATE`.
-4. Validar que dos reservas confirmadas solapadas no sean aceptadas para el mismo profesional.
+4. Validar que dos reservas con estados que ocupan agenda solapadas no sean aceptadas para el mismo profesional.
 5. Registrar en `evidence/` capturas o salidas de las validaciones.
 
 ## Fuente de trazabilidad
@@ -615,5 +734,13 @@ Las decisiones del modelo se contrastaron con la rama `main` del repositorio pri
 - `src/main/resources/db/migration/V44__cascade_notification_delivery_booking.sql`
 - `src/main/resources/db/migration/V45__create_professional_service.sql`
 - `src/main/resources/db/migration/V46__prevent_overlapping_confirmed_bookings.sql`
+- `src/main/resources/db/migration/V47__occupying_statuses_block_overlaps.sql`
+- `src/main/resources/db/migration/V50__create_agenda_blocks.sql`
+- `src/main/resources/db/migration/V55__create_physical_resources.sql`
+- `src/main/resources/db/migration/V56__create_service_resource.sql`
+- `src/main/resources/db/migration/V65__add_booking_price_snapshot.sql`
+- `src/main/resources/db/migration/V66__create_general_report_indexes.sql`
+- `src/main/resources/db/migration/V67__allow_report_audit_events.sql`
+- `src/main/resources/db/migration/V70__allow_customer_history_audit.sql`
 
-La matriz de roles PostgreSQL, la estimación de volumen y el análisis de costos quedan documentados en este README y en [`docs/analisis-almacenamiento.md`](docs/analisis-almacenamiento.md), conforme a los requerimientos de entrega del Sprint 2.
+La matriz de roles PostgreSQL, la función almacenada, la estimación de volumen y el análisis de costos quedan documentados en este README y en [`docs/analisis-almacenamiento.md`](docs/analisis-almacenamiento.md), conforme a los requerimientos de entrega del Sprint 3.
