@@ -1,4 +1,4 @@
--- Modelo físico consolidado del Sprint 2 - Caso 14.
+-- Modelo físico consolidado del Sprint 3 - Caso 14.
 -- PostgreSQL / Supabase. Ejecutar sobre una base de datos vacía.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

@@ -674,32 +674,20 @@ El script ejecutable de creación de roles y privilegios está en [`docs/roles-s
 - `migrations/`: migraciones Flyway locales, desde `V1` hasta `V70`, que representan la evolución incremental del esquema.
 - `docs/roles-seguridad.sql`: roles PostgreSQL, permisos y revocaciones según mínimo privilegio.
 - [`docs/analisis-almacenamiento.md`](docs/analisis-almacenamiento.md): documento completo con el análisis de almacenamiento, índices, costo de una consulta y optimización algebraica exigido en los criterios 7, 8 y 9.
-- `evidence/`: evidencias de ejecución del esquema y de las restricciones principales.
+- `evidence/`: evidencias conservadas del Sprint 2.
+- `evidence-s3/`: evidencias específicas de las validaciones del Sprint 3.
 
 ## Evidencias del Sprint 3
 
-### Esquema y estructura
+### Evidencias incorporadas
 
-- [Ejecución exitosa de `schema.sql`](evidence/01-schema-sprint2-ejecutado.png)
-- [Tablas creadas](evidence/02-tablas-sprint2.png)
-- [Estructura de `bookings`](evidence/03a-bookings-estructura.png)
-- [Estructura de `profesionales`](evidence/03b-profesionales-estructura.png)
-- [Estructura de `notification_delivery`](evidence/03c-notificaciones-estructura.png)
-
-### Integridad, seguridad y consultas
-
-- [Auditoría inmutable](evidence/04-auditoria-inmutable.png)
-- [Roles y privilegios](evidence/05-roles-privilegios.png)
-- [Consultas de reservas y notificaciones](evidence/06a-consultas-reservas-notificaciones.png)
-- [Consultas de auditoría, servicios y horarios](evidence/06b-consultas-auditoria-servicio-horario.png)
-- [Plan de ejecución de consulta con `JOIN`](evidence/07-explain-consulta.png)
-
-### Validación final en Supabase
-
-- [Tablas creadas por el `schema.sql` final](evidence/08-supabase-tablas.png)
-- [Restricción contra solapamiento de reservas confirmadas](evidence/09-supabase-restriccion-bookings.png)
-- [Índices de `bookings`](evidence/10-supabase-indices-bookings.png)
-- Las nuevas validaciones deben documentar los bloqueos de agenda, recursos físicos, precio histórico,
+- [Ejecución exitosa del `schema.sql` final](evidence-s3/01-schema-final-ejecutado.png)
+- [Tablas nuevas creadas](evidence-s3/02-tablas-nuevas.png)
+- [Trigger de auditoría rechazando una modificación](evidence-s3/03-trigger-auditoria.png)
+- [Función de historial ejecutada](evidence-s3/04-funcion-historial.png)
+- [Consultas nuevas del Sprint 3](evidence-s3/05-consultas-sprint3.png)
+- [Roles y permisos actualizados](evidence-s3/06-roles-permisos.png)
+- Estas evidencias documentan los bloqueos de agenda, recursos físicos, precio histórico,
   auditoría ampliada, función de historial y permisos `EXECUTE`.
 
 ### Documento de análisis
@@ -718,7 +706,7 @@ Después de cualquiera de las dos opciones:
 2. Ejecutar las consultas de negocio documentadas.
 3. Validar que `audit_log` rechace `UPDATE`, `DELETE` y `TRUNCATE`.
 4. Validar que dos reservas con estados que ocupan agenda solapadas no sean aceptadas para el mismo profesional.
-5. Registrar en `evidence/` capturas o salidas de las validaciones.
+5. Registrar en `evidence-s3/` capturas o salidas de las validaciones.
 
 ## Fuente de trazabilidad
 
