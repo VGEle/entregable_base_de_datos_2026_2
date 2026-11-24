@@ -2032,11 +2032,26 @@ Reglas de seguridad documentadas:
 
 El script ejecutable de creación de roles y privilegios está en [`docs/roles-seguridad.sql`](docs/roles-seguridad.sql). Debe ejecutarse con un usuario administrador después de crear el esquema.
 
+### Revisión de RLS en Supabase
+
+Se revisó el estado de Row Level Security en Supabase y se conserva la evidencia en [`evidence-s3/06-rls-revision.png`](evidence-s3/06-rls-revision.png). En este entregable RLS permanece desactivado porque la aplicación principal utiliza autenticación JWT y roles técnicos de PostgreSQL, definidos en `docs/roles-seguridad.sql`. No se activan políticas incompletas que puedan bloquear la aplicación; el control de acceso se documenta mediante `bookly_admin`, `bookly_app` y `bookly_readonly`.
+
+### Matriz de funciones y triggers
+
+| Objeto | HU | Parámetros o evento | Resultado esperado |
+|---|---|---|---|
+| `get_customer_booking_history` | HU-13 | `customer_id`, fecha inicial opcional y fecha final opcional | Retorna las reservas del cliente ordenadas de la más reciente a la más antigua. |
+| `trg_audit_log_immutable` | HU-19, HU-13 y HU-16 | `BEFORE UPDATE OR DELETE`, por fila | Rechaza la modificación o eliminación de un registro de auditoría. |
+| `trg_audit_log_no_truncate` | HU-19, HU-13 y HU-16 | `BEFORE TRUNCATE`, por sentencia | Rechaza el borrado completo de la bitácora. |
+
+La reproducción de estas validaciones está en [`docs/validacion-sprint3.sql`](docs/validacion-sprint3.sql). Las pruebas negativas de auditoría se ejecutan individualmente porque su resultado esperado es un error controlado.
+
 ## Archivos del entregable
 
 - `schema.sql`: script DDL autocontenido y ejecutable sobre PostgreSQL vacío, con las tablas, restricciones, triggers, índices y función de la entrega final.
 - `migrations/`: migraciones Flyway locales, desde `V1` hasta `V70`, que representan la evolución incremental del esquema.
 - `docs/roles-seguridad.sql`: roles PostgreSQL, permisos y revocaciones según mínimo privilegio.
+- [`docs/validacion-sprint3.sql`](docs/validacion-sprint3.sql): consultas reproducibles para validar las HUs del Sprint 3, planes de ejecución, triggers de auditoría y estado de RLS.
 - [`docs/analisis-almacenamiento.md`](docs/analisis-almacenamiento.md): documento completo con el análisis de almacenamiento, índices, costo de una consulta y optimización algebraica exigido en los criterios 7, 8 y 9.
 - `evidence/`: evidencias conservadas del Sprint 2.
 - `evidence-s3/`: evidencias específicas de las validaciones del Sprint 3.
@@ -2061,6 +2076,25 @@ El script ejecutable de creación de roles y privilegios está en [`docs/roles-s
 - Estas evidencias documentan los bloqueos de agenda, recursos físicos, precio histórico,
   auditoría ampliada, función de historial y permisos `EXECUTE`.
 
+### Evidencias de validación reproducible
+
+Las siguientes capturas corresponden a la ejecución independiente de las consultas incluidas en [`docs/validacion-sprint3.sql`](docs/validacion-sprint3.sql):
+
+- [Verificación final de tablas](evidence-s3/07-tablas-validacion-final.png)
+- [Función de historial con datos](evidence-s3/08-funcion-historial-reproducible.png)
+- [Consulta de bloqueos de agenda](evidence-s3/09-bloqueos-validacion.png)
+- [Consulta de reservas que ocupan agenda](evidence-s3/10-reservas-validacion.png)
+- [Recursos físicos requeridos por una reserva](evidence-s3/11-recursos-validacion-con-datos.png)
+- [Ingresos por servicio con precio histórico](evidence-s3/12-ingresos-validacion.png)
+- [Plan de ejecución del historial](evidence-s3/13-explain-historial.png)
+- [Plan de ejecución de ingresos](evidence-s3/14-explain-ingresos.png)
+- [`UPDATE` bloqueado sobre `audit_log`](evidence-s3/15-update-audit-bloqueado.png)
+- [`DELETE` bloqueado sobre `audit_log`](evidence-s3/16-delete-audit-bloqueado.png)
+- [`TRUNCATE` bloqueado sobre `audit_log`](evidence-s3/17-truncate-audit-bloqueado.png)
+- [Estado de RLS revisado en Supabase](evidence-s3/18-revision-rls-final.png)
+
+Las capturas de `UPDATE`, `DELETE` y `TRUNCATE` muestran errores controlados y esperados: la bitácora está diseñada como append-only.
+
 ### Documento de análisis
 
 En este documento [`docs/analisis-almacenamiento.md`](docs/analisis-almacenamiento.md) se contienen los supuestos, fórmulas, cálculos paso a paso, comparación de costos y transformaciones algebraicas.
@@ -2078,6 +2112,8 @@ Después de cualquiera de las dos opciones:
 3. Validar que `audit_log` rechace `UPDATE`, `DELETE` y `TRUNCATE`.
 4. Validar que dos reservas con estados que ocupan agenda solapadas no sean aceptadas para el mismo profesional.
 5. Registrar en `evidence-s3/` capturas o salidas de las validaciones.
+
+La consulta [`docs/validacion-sprint3.sql`](docs/validacion-sprint3.sql) reúne estas comprobaciones y agrega ejemplos de `EXPLAIN (ANALYZE, BUFFERS)` para documentar el uso de índices en historial e ingresos. Las sentencias `UPDATE`, `DELETE` y `TRUNCATE` sobre `audit_log` deben ejecutarse individualmente, porque el error de append-only es el resultado esperado.
 
 ## Fuente de trazabilidad
 
