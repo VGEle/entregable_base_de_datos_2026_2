@@ -684,9 +684,16 @@ El script ejecutable de creación de roles y privilegios está en [`docs/roles-s
 - [Ejecución exitosa del `schema.sql` final](evidence-s3/01-schema-final-ejecutado.png)
 - [Tablas nuevas creadas](evidence-s3/02-tablas-nuevas.png)
 - [Trigger de auditoría rechazando una modificación](evidence-s3/03-trigger-auditoria.png)
+- [Trigger bloqueando `DELETE`](evidence-s3/03b-trigger-delete.png)
+- [Trigger bloqueando `TRUNCATE`](evidence-s3/03c-trigger-truncate.png)
 - [Función de historial ejecutada](evidence-s3/04-funcion-historial.png)
 - [Consultas nuevas del Sprint 3](evidence-s3/05-consultas-sprint3.png)
+- [Datos de ejemplo insertados](evidence-s3/05a-datos-ejemplo.png)
+- [Bloqueo de agenda consultado](evidence-s3/05a-bloqueos-agenda.png)
+- [Reserva con precio histórico](evidence-s3/05b-reserva-precio-historico.png)
+- [Ingresos agrupados por servicio](evidence-s3/05c-ingresos-por-servicio.png)
 - [Roles y permisos actualizados](evidence-s3/06-roles-permisos.png)
+- [Revisión del estado RLS en Supabase](evidence-s3/06-rls-revision.png)
 - Estas evidencias documentan los bloqueos de agenda, recursos físicos, precio histórico,
   auditoría ampliada, función de historial y permisos `EXECUTE`.
 
