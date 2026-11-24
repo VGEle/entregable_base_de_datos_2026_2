@@ -7,7 +7,7 @@
 **Repositorio principal:** [Code-Factory-Bookly/backendcf](https://github.com/Code-Factory-Bookly/backendcf)
 **Proyecto Azure DevOps:** [CodeFactory EAV10](https://dev.azure.com/CodeFactoryEAV10/CodeFactory%20EAV10/)
 
-**Integrantes:** Sofía Espinal Vasquez, Elena Vargas Grisales, Miguel Angel Marín Otalvaro, Ana María Garzón Giraldo.
+**Integrantes:** Sofía Espinal Vasquez, Elena Vargas Grisales, Miguel Angel Marín Otalvaro, Ana María Garzón Giraldo, Adelaida Rodriguez García
 
 ## Propósito y alcance
 
@@ -1645,6 +1645,11 @@ El índice único parcial `unique_booking_per_professional_time` impide duplicar
 
 Los triggers `trg_audit_log_immutable` y `trg_audit_log_no_truncate` rechazan `UPDATE`, `DELETE` y `TRUNCATE`.
 
+| Trigger | HU relacionada | Evento y momento | Propósito |
+|---|---|---|---|
+| `trg_audit_log_immutable` | HU-19, HU-13 y HU-16 | `BEFORE UPDATE OR DELETE`, por fila | Mantener la bitácora de auditoría como registro append-only. |
+| `trg_audit_log_no_truncate` | HU-19, HU-13 y HU-16 | `BEFORE TRUNCATE`, por sentencia | Impedir que se elimine la bitácora completa en una sola operación. |
+
 ### `mfa_recovery_code`
 
 | Atributo | Tipo | Null | Clave, valor predeterminado o regla |
@@ -1866,6 +1871,27 @@ WHERE s.id = :servicio_id
 ORDER BY r.nombre;
 ```
 
+#### 12b. Recursos requeridos por reservas en un período
+
+```sql
+SELECT b.id AS booking_id,
+       b.start_time,
+       b.end_time,
+       r.id AS recurso_id,
+       r.nombre AS recurso,
+       r.cantidad_total
+FROM bookings b
+JOIN servicio_recurso sr ON sr.servicio_id = b.service_id
+JOIN recursos_fisicos r ON r.id = sr.recurso_id
+WHERE b.status IN ('CONFIRMADA', 'RESCHEDULED', 'COMPLETED')
+  AND b.start_time < :hasta
+  AND b.end_time > :desde
+ORDER BY b.start_time, r.nombre;
+```
+
+Esta consulta entrega la demanda de recursos por reserva. La comparación de reservas simultáneas con
+`cantidad_total` se realiza dentro de la transacción de creación de la reserva.
+
 #### 13. Historial de reservas mediante función almacenada
 
 ```sql
@@ -1875,16 +1901,21 @@ FROM get_customer_booking_history(:customer_id, :desde, :hasta);
 
 La función filtra por cliente y aplica, cuando se proporcionan, los límites de fecha.
 
-#### 14. Reservas que ocupan agenda por profesional
+#### 14. Minutos reservados por profesional
 
 ```sql
-SELECT professional_id, COUNT(*) AS reservas_que_ocupan
+SELECT professional_id,
+       COUNT(*) AS reservas_que_ocupan,
+       SUM(EXTRACT(EPOCH FROM (end_time - start_time)) / 60) AS minutos_reservados
 FROM bookings
 WHERE status IN ('CONFIRMADA', 'RESCHEDULED', 'COMPLETED')
   AND start_time >= :desde
   AND start_time < :hasta
 GROUP BY professional_id;
 ```
+
+El porcentaje de ocupación se obtiene dividiendo `minutos_reservados` entre la capacidad disponible del
+profesional en el período, descontando los bloqueos de agenda.
 
 #### 15. Ingresos por servicio usando el precio histórico
 
@@ -1896,6 +1927,19 @@ WHERE status IN ('CONFIRMADA', 'COMPLETED')
   AND price_at_booking IS NOT NULL
 GROUP BY service_id
 ORDER BY ingresos DESC;
+```
+
+#### 16. Resumen general de reservas e ingresos
+
+```sql
+SELECT COUNT(*) AS reservas_totales,
+       COUNT(*) FILTER (WHERE status = 'CANCELADA') AS reservas_canceladas,
+       COALESCE(SUM(price_at_booking) FILTER (
+           WHERE status IN ('CONFIRMADA', 'COMPLETED')
+       ), 0) AS ingresos
+FROM bookings
+WHERE start_time >= :desde
+  AND start_time < :hasta;
 ```
 
 Las consultas 2, 4, 6, 7, 9 y 10 incluyen reuniones (`JOIN` o `LEFT JOIN`); las consultas 3 y 5 incluyen agregaciones. Los valores UUID y nombres utilizados como ejemplo pueden reemplazarse por datos existentes sin cambiar la estructura de las consultas.
@@ -1944,6 +1988,26 @@ FROM get_customer_booking_history(
     CURRENT_TIMESTAMP::timestamp
 );
 ```
+
+## Cobertura y límites de las reglas del Sprint 3
+
+Esta tabla distingue las reglas que la base de datos garantiza directamente de las que requieren una
+transacción o una validación en la aplicación. La distinción evita atribuir al esquema una responsabilidad
+que pertenece a otra capa.
+
+| Regla del Sprint 3 | Garantía en Base de Datos | Validación complementaria |
+|---|---|---|
+| Un bloqueo debe tener un rango válido y no solaparse con otro del mismo profesional | `CHECK (fin > inicio)` y exclusión `bloqueo_agenda_sin_solapamiento` | El servicio traduce el conflicto a la respuesta de negocio correspondiente. |
+| Reservas que ocupan agenda no pueden solaparse | Restricción de exclusión `booking_no_overlapping_confirmed` para `CONFIRMADA`, `RESCHEDULED` y `COMPLETED` | La aplicación valida bloqueos de agenda y disponibilidad antes de reservar. |
+| Un recurso debe tener una cantidad positiva y puede asignarse a varios servicios | `CHECK (cantidad_total > 0)`, PK compuesta y FKs de `servicio_recurso` | La aplicación calcula la capacidad disponible durante la transacción de reserva. |
+| Los ingresos deben conservar el precio histórico | `bookings.price_at_booking` y `CHECK` de valor positivo | La aplicación copia el precio vigente al crear la reserva; los reportes suman el snapshot. |
+| La auditoría no debe alterarse | Triggers `trg_audit_log_immutable` y `trg_audit_log_no_truncate` | Los roles revocan modificaciones de `bookly_app`. |
+| El historial del cliente debe filtrarse por cliente y fechas | Función `get_customer_booking_history` | La aplicación debe obtener el cliente autenticado y controlar autorización y paginación. |
+| La ocupación debe considerar agenda y bloqueos | Índices sobre reservas y consulta de reservas por periodo | El servicio de reportes combina horario semanal, reservas y bloqueos para calcular el porcentaje. |
+
+Las consultas SQL incluidas en este README muestran la información que la base puede entregar directamente.
+Las reglas de capacidad de recursos, cálculo porcentual de ocupación, MFA y autorización HTTP no se presentan
+como triggers de la base porque en el proyecto principal están implementadas en la capa de aplicación.
 
 ## Roles y esquema de seguridad
 
