@@ -39,7 +39,108 @@ La fuente técnica de referencia es el código SQL de Flyway ubicado en `src/mai
 
 ## Diagrama ER refinado
 
-```drawio
+```mermaid
+erDiagram
+    APP_USER ||--o| PROFESIONALES : tiene
+    PROFESIONALES ||--o{ HORARIO_SEMANAL : define
+    PROFESIONALES ||--o{ PROFESIONAL_SERVICIO : ofrece
+    SERVICIOS ||--o{ PROFESIONAL_SERVICIO : incluye
+    APP_USER ||--o{ BOOKINGS : solicita
+    PROFESIONALES ||--o{ BOOKINGS : atiende
+    SERVICIOS ||--o{ BOOKINGS : corresponde
+    BOOKINGS ||--o{ NOTIFICATION_DELIVERY : genera
+    PROFESIONALES ||--o{ BLOQUEO_AGENDA : bloquea
+    SERVICIOS ||--o{ SERVICIO_RECURSO : requiere
+    RECURSOS_FISICOS ||--o{ SERVICIO_RECURSO : asigna
+    APP_USER ||--o{ AUDIT_LOG : ejecuta
+    APP_USER ||--o{ MFA_RECOVERY_CODE : posee
+    APP_USER ||--o{ MFA_TRUSTED_DEVICE : autoriza
+
+    APP_USER {
+        uuid id PK
+        varchar email UK
+        varchar role
+        boolean enabled
+        boolean mfa_enabled
+    }
+    PLATFORM {
+        uuid id PK
+        varchar name
+        varchar status
+    }
+    PROFESIONALES {
+        uuid id PK, FK
+        varchar especialidad
+    }
+    SERVICIOS {
+        uuid id PK
+        varchar nombre UK
+        integer duracion_minutos
+        numeric precio
+        varchar estado
+    }
+    HORARIO_SEMANAL {
+        uuid id PK
+        uuid profesional_id FK
+        varchar dia_semana
+        time hora_inicio
+        time hora_fin
+    }
+    PROFESIONAL_SERVICIO {
+        uuid id PK
+        uuid profesional_id FK
+        uuid servicio_id FK
+    }
+    BOOKINGS {
+        uuid id PK
+        uuid customer_id FK
+        uuid professional_id FK
+        uuid service_id FK
+        timestamp start_time
+        timestamp end_time
+        varchar status
+        numeric price_at_booking
+    }
+    NOTIFICATION_DELIVERY {
+        uuid id PK
+        uuid booking_id FK
+        varchar status
+    }
+    BLOQUEO_AGENDA {
+        uuid id PK
+        uuid profesional_id FK
+        timestamp inicio
+        timestamp fin
+    }
+    RECURSOS_FISICOS {
+        uuid id PK
+        varchar nombre UK
+        integer cantidad_total
+    }
+    SERVICIO_RECURSO {
+        uuid servicio_id PK, FK
+        uuid recurso_id PK, FK
+    }
+    AUDIT_LOG {
+        uuid id PK
+        uuid actor_user_id FK
+        varchar action_type
+        varchar resource_type
+    }
+    MFA_RECOVERY_CODE {
+        uuid id PK
+        uuid user_id FK
+    }
+    MFA_TRUSTED_DEVICE {
+        uuid id PK
+        uuid user_id FK
+    }
+```
+
+<details>
+<summary>Fuente editable del diagrama draw.io</summary>
+
+```xml
 <mxfile>
   <diagram id="Apu7d7yXoVykscMsgzfk" name="Page-1">
     <mxGraphModel dx="2628" dy="2450" grid="1" gridSize="10" guides="1" tooltips="0" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
@@ -1377,6 +1478,7 @@ La fuente técnica de referencia es el código SQL de Flyway ubicado en `src/mai
 </mxfile>
 
 ```
+</details>
 
 `platform` mantiene una sola fila mediante un índice único sobre una expresión constante. `profesionales` comparte su identificador con `app_user` y utiliza una FK compuesta para aceptar únicamente cuentas con rol `PROFESSIONAL`. La unicidad parcial de `bookings` y la exclusión por rango aplican a los estados que ocupan agenda (`CONFIRMADA`, `RESCHEDULED` y `COMPLETED`), de modo que una franja cancelada pueda reutilizarse.
 
